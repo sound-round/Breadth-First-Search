@@ -1,6 +1,20 @@
 from collections import deque
 from tkinter import *
 
+
+CELL_SIZE = 20
+WIDTH = 30
+HEIGHT = 20
+START_COLOR = "#FF0000"
+PATH_COLOR = "#00FF00"
+FINISH_COLOR = "#0000FF"
+BARRIER_COLOR = "#000000"
+START = (10, 7)
+FINISH = (20, 7)
+BARRIERS = [(15, 5), (15, 6), (15, 7), (15, 8), (15, 9)]
+
+
+
 class Grid:
     def __init__(self, width, height):
         self.width = width
@@ -70,50 +84,56 @@ def get_path(came_from, start_point, finish_point):
     return path
 
 
-grid = Grid(30, 20)
-grid.barriers = [(15, 5), (15, 6), (15, 7), (15, 8), (15, 9)]
-start = (10, 7)
-finish = (20, 7)
-possible_paths = breath_first_search(grid, start)
-# print('came_from: ', came_from)
-
-shortest_path = get_path(possible_paths, start, finish)
+grid = Grid(WIDTH * CELL_SIZE, HEIGHT * CELL_SIZE)
+grid.barriers = BARRIERS
+possible_paths = breath_first_search(grid, START)
+shortest_path = get_path(possible_paths, START, FINISH)
 print('shortest_path: ', shortest_path)
 
-# CELL_SIZE = 32
-#
-# WIDTH = 30
-# HEIGHT = 20
-#
-# userX = 5
-# userY = 1
-#
-# currentTick = 0
-#
-# window = Tk()
-# window.wm_title("breath_first_search")
-#
-# canvas = Canvas(window, width=WIDTH * CELL_SIZE, height=HEIGHT * CELL_SIZE)
-# canvas.pack()
-#
-# def draw():
-#     def draw_rect_at(x, y, color, width=0):
-#         x *= CELL_SIZE
-#         y *= CELL_SIZE
-#         canvas.create_rectangle(x, y, x + CELL_SIZE, y + CELL_SIZE, fill=color)
-#
-#     for x in range(0, WIDTH):
-#         for y in range(0, HEIGHT):
-#             draw_rect_at(x, y)
-#
-#     draw_rect_at(userX, userY, PLAYER_COLOR, 1)
-#
-#
-# def do_loop():
-#
-#     draw()
-#     window.after(int(1000 / 15), do_loop)
-#
-#
-# do_loop()
-# window.mainloop()
+
+window = Tk()
+window.title('breath_first_search')
+canvas = Canvas(
+    window,
+    background='light grey',
+    width=WIDTH * CELL_SIZE,
+    height=HEIGHT * CELL_SIZE,
+)
+for line in range(0, WIDTH * CELL_SIZE, CELL_SIZE):  # range(start, stop, step)
+    canvas.create_line([(line, 0), (line, HEIGHT * CELL_SIZE)], fill='white', tags='grid_line_w')
+
+for line in range(0, HEIGHT * CELL_SIZE, CELL_SIZE):
+    canvas.create_line([(0, line), (WIDTH * CELL_SIZE, line)], fill='white', tags='grid_line_h')
+canvas.grid(row=0, column=0)
+
+
+def draw():
+    def draw_rect_at(x, y, color):
+        x *= CELL_SIZE
+        y *= CELL_SIZE
+        canvas.create_rectangle(x, y, x + CELL_SIZE, y + CELL_SIZE, fill=color)
+
+    # for x in range(0, WIDTH):
+    #     for y in range(0, HEIGHT):
+    #         draw_rect_at(x, y, START_COLOR)
+    start_x, start_y = START
+    finish_x, finish_y = FINISH
+    draw_rect_at(start_x, start_y, START_COLOR)
+    draw_rect_at(finish_x, finish_y, FINISH_COLOR)
+    for point in shortest_path[1:-1]:
+        x, y = point
+        draw_rect_at(x, y, PATH_COLOR)
+
+    for point in BARRIERS:
+        x, y = point
+        draw_rect_at(x, y, BARRIER_COLOR)
+
+
+def do_loop():
+    draw()
+    window.after(int(1000 / 15), do_loop)
+
+
+do_loop()
+window.mainloop()
+
