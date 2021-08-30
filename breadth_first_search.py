@@ -2,6 +2,8 @@ from collections import deque
 from tkinter import *
 import random
 import time
+import pandas as pd
+import numpy as np
 
 
 CELL_SIZE = 20
@@ -16,9 +18,15 @@ ORDER_LINE_COLOR = "#000000"
 BARRIER_COLOR = "#505050"
 START = (10, 7)
 FINISH = (20, 7)
-BARRIERS = [(15, 5), (15, 6), (15, 7), (15, 8), (15, 9)]
+
 
 ORDERS = []
+
+
+barriers = pd.DataFrame(
+    np.zeros([HEIGHT, WIDTH]) * np.nan,
+).replace({np.nan: None})
+print(barriers)
 
 
 class Order(object):
@@ -45,11 +53,11 @@ class Grid:
 
     def in_bounds(self, point):
         (x, y) = point
-        return 0 <= x < self.width and 0 <= y < self.height
+        return 0 <= x < self.width / CELL_SIZE and 0 <= y < self.height / CELL_SIZE
 
     def is_not_barrier(self, point):
-       # return self.barriers[point[0]][point[1]]
-        return point not in self.barriers  # TODO OPTIMIZE - SLOW PART
+        return not self.barriers[point[0]][point[1]]
+        #  return point not in self.barriers  # TODO OPTIMIZE - SLOW PART
 
     def get_neighbors(self, point):
         (x, y) = point
@@ -108,7 +116,7 @@ def get_path(came_from, start_point, finish_point):
 
 
 grid = Grid(WIDTH * CELL_SIZE, HEIGHT * CELL_SIZE)
-grid.barriers = BARRIERS
+grid.barriers = barriers
 
 window = Tk()
 window.title('breath_first_search')
@@ -153,21 +161,21 @@ def draw_orders():
         draw_line_at(order.start, order.end, ORDER_LINE_COLOR)
 
 
-possible_paths = []
-shortest_path = []
+possible_paths = breath_first_search(grid, START)
+shortest_path = get_path(possible_paths, START, FINISH)
 
 
 def on_click(event):
-    global BARRIERS
+    global barriers
     global shortest_path
 
     x = int(event.x / CELL_SIZE)
     y = int(event.y / CELL_SIZE)
-    if (x, y) in BARRIERS:
-        print(BARRIERS.index((x, y)))
-        BARRIERS.pop(BARRIERS.index((x, y)))
+    if barriers[x][y]:
+        # print(barriers.index((x, y)))
+        barriers[x][y] = None
     else:
-        BARRIERS.append((x, y))
+        barriers[x][y] = True
 
     startMs = time.time() * 1000.0
     possible_paths = breath_first_search(grid, START)
@@ -175,7 +183,7 @@ def on_click(event):
     endMs = time.time() * 1000.0
     print('shortest_path: ', shortest_path, endMs - startMs )
 
-    print("mouse click " + str(x) + " "  + str(y) + " barriers size=" + str(len(BARRIERS)))
+    print("mouse click " + str(x) + " " + str(y) + " barriers size=" + str(len(barriers)))
 
 
 canvas.bind("<Button-1>", on_click)
@@ -195,9 +203,14 @@ def draw():
         x, y = point
         draw_rect_at(x, y, PATH_COLOR)
 
-    for point in BARRIERS:
-        x, y = point
-        draw_rect_at(x, y, BARRIER_COLOR)
+    for x in barriers.columns:
+        for y in barriers.index:
+            if barriers[x][y]:
+                draw_rect_at(x, y, BARRIER_COLOR)
+
+    # for point in barriers:
+    #     x, y = point
+    #     draw_rect_at(x, y, BARRIER_COLOR)
 
     draw_orders()
 
