@@ -9,24 +9,15 @@ import numpy as np
 CELL_SIZE = 20
 WIDTH = 30
 HEIGHT = 20
-START_COLOR = "#FF0000"
+ROBOT_COLOR = "#FF0000"
 PATH_COLOR = "#00FF00"
-FINISH_COLOR = "#0000FF"
+TARGET_COLOR = "#0000FF"
 ORDER_START_COLOR = "#00ddFF"
 ORDER_END_COLOR = "#ffdd00"
 ORDER_LINE_COLOR = "#000000"
 BARRIER_COLOR = "#505050"
 START = (10, 7)
-FINISH = (20, 7)
-
-
-ORDERS = []
-
-
-barriers = pd.DataFrame(
-    np.zeros([HEIGHT, WIDTH]) * np.nan,
-).replace({np.nan: None})
-print(barriers)
+TARGET = (20, 7)
 
 
 class Order(object):
@@ -35,15 +26,47 @@ class Order(object):
         self.end = end
 
 
-for x in range(1, 10):
-    # TODO delete from barriers
-    ORDERS.append(Order(
-        (random.randint(0, WIDTH), random.randint(0, HEIGHT)),
-        (random.randint(0, WIDTH), random.randint(0, HEIGHT))
-    ))
+class Robot:
+    def __init__(self, loc):
+        self.loc = loc
+        self.goods = False
+        self.order = None
+        self.path = None
+        self.target = None
+        self.route = None
+
+    def find_path(self, orders):
+        if not self.goods:
+            orders_starts = [order.start for order in orders]
+            search_result = breath_first_search(grid, self.loc, orders_starts)
+            self.order = [order for order in orders if order.start == search_result[1]][0]
+            self.target = self.order.start
+            self.path = get_path(search_result[0], self.loc, self.target)
+            return
+        self.target = self.order.end
+        search_result = breath_first_search(grid, self.loc, [self.target])
+        self.path = get_path(search_result[0], self.loc, self.target)
+        return
+
+    def walk(self):
+        global orders
+        self.route = iter(self.path[1:])
+        try:
+            self.loc = self.route.__next__()
+            search_result = breath_first_search(grid, self.loc, [self.target])
+            self.path = get_path(search_result[0], self.loc, self.target)
+        except StopIteration:
+            print('StopIteration')
+            if self.target == self.order.end:
+                orders.pop(orders.index(self.order))
+            self.goods = not self.goods
+            self.route = None
+            if orders:
+                robot.find_path(orders)
 
 
 # PROFIT = MAX_TIPS - ORDER.CREATED - DELIVERY_TIME
+
 
 class Grid:
     def __init__(self, width, height):
@@ -85,21 +108,26 @@ class Queue:
         return not self.queue
 
 
-def breath_first_search(graph, start_point):
+def breath_first_search(graph, start_point, finish_points: list = []):
     frontier = Queue()
     frontier.put(start_point)
     came_from = dict()
     came_from[start_point] = None
+    target_point = None
 
     while not frontier.is_empty():
         current_point = frontier.get_next_point()
+
+        if current_point in finish_points:
+            target_point = current_point
+            break
 
         for next_point in graph.get_neighbors(current_point):
             if next_point not in came_from:
                 frontier.put(next_point)
                 came_from[next_point] = current_point
 
-    return came_from
+    return came_from, target_point
 
 
 # start must be the same that was in breath_first_search
@@ -115,6 +143,12 @@ def get_path(came_from, start_point, finish_point):
     return path
 
 
+barriers = pd.DataFrame(
+    np.zeros([HEIGHT, WIDTH]) * np.nan,
+).replace({np.nan: None})
+print(barriers)
+
+
 grid = Grid(WIDTH * CELL_SIZE, HEIGHT * CELL_SIZE)
 grid.barriers = barriers
 
@@ -126,6 +160,42 @@ canvas = Canvas(
     width=WIDTH * CELL_SIZE,
     height=HEIGHT * CELL_SIZE,
 )
+
+
+orders = []
+for x in range(1, 4):
+    # TODO delete from barriers
+    orders.append(Order(
+        (random.randint(0, WIDTH - 1), random.randint(0, HEIGHT - 1)),
+        (random.randint(0, WIDTH - 1), random.randint(0, HEIGHT - 1))
+    ))
+
+
+robot = Robot(START)
+robot.find_path(orders)
+
+
+def on_click(event):
+    global barriers
+
+    x = int(event.x / CELL_SIZE)
+    y = int(event.y / CELL_SIZE)
+    if barriers[x][y]:
+        barriers[x][y] = None
+    else:
+        barriers[x][y] = True
+
+    startMs = time.time() * 1000.0
+    possible_paths = breath_first_search(grid, robot.loc)
+    robot.path = get_path(possible_paths[0], robot.loc, robot.target)
+    robot.walk()
+    endMs = time.time() * 1000.0
+    print('shortest_path: ', robot.path, endMs - startMs )
+
+    print("mouse click " + str(x) + " " + str(y) + " barriers size=" + str(len(barriers)))
+
+
+canvas.bind("<Button-1>", on_click)
 
 
 def draw_grid():
@@ -150,56 +220,25 @@ def draw_line_at(start, end, color):
         end[1] * CELL_SIZE + CELL_SIZE / 2,
         fill=color
     )
-    pass
 
 
 def draw_orders():
-    for order in ORDERS:
+    for order in orders:
 
         draw_rect_at(order.start[0], order.start[1], ORDER_START_COLOR)
         draw_rect_at(order.end[0], order.end[1], ORDER_END_COLOR)
         draw_line_at(order.start, order.end, ORDER_LINE_COLOR)
 
 
-possible_paths = breath_first_search(grid, START)
-shortest_path = get_path(possible_paths, START, FINISH)
-
-
-def on_click(event):
-    global barriers
-    global shortest_path
-
-    x = int(event.x / CELL_SIZE)
-    y = int(event.y / CELL_SIZE)
-    if barriers[x][y]:
-        # print(barriers.index((x, y)))
-        barriers[x][y] = None
-    else:
-        barriers[x][y] = True
-
-    startMs = time.time() * 1000.0
-    possible_paths = breath_first_search(grid, START)
-    shortest_path = get_path(possible_paths, START, FINISH)
-    endMs = time.time() * 1000.0
-    print('shortest_path: ', shortest_path, endMs - startMs )
-
-    print("mouse click " + str(x) + " " + str(y) + " barriers size=" + str(len(barriers)))
-
-
-canvas.bind("<Button-1>", on_click)
-
-
 def draw():
     canvas.create_rectangle(0, 0, 1024, 1024, fill="#FFFFFF")
     draw_grid()
-    # for x in range(0, WIDTH):
-    #     for y in range(0, HEIGHT):
-    #         draw_rect_at(x, y, START_COLOR)
-    start_x, start_y = START
-    finish_x, finish_y = FINISH
-    draw_rect_at(start_x, start_y, START_COLOR)
-    draw_rect_at(finish_x, finish_y, FINISH_COLOR)
-    for point in shortest_path[1:-1]:
+    draw_orders()
+    robot_x, robot_y = robot.loc
+    target_x, target_y = robot.target
+    draw_rect_at(robot_x, robot_y, ROBOT_COLOR)
+    draw_rect_at(target_x, target_y, TARGET_COLOR)
+    for point in robot.path[1:-1]:
         x, y = point
         draw_rect_at(x, y, PATH_COLOR)
 
@@ -208,17 +247,20 @@ def draw():
             if barriers[x][y]:
                 draw_rect_at(x, y, BARRIER_COLOR)
 
-    # for point in barriers:
-    #     x, y = point
-    #     draw_rect_at(x, y, BARRIER_COLOR)
-
-    draw_orders()
-
 
 def do_loop():
     draw()
     window.after(int(1000 / 15), do_loop)
 
 
+def run_robot():
+    if orders:
+        robot.walk()
+        window.after(int(10), run_robot)
+    else:
+        print('finish!')
+
+
 do_loop()
+run_robot()
 window.mainloop()
