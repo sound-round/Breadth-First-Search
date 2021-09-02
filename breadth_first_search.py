@@ -1,17 +1,19 @@
 import io
 from collections import deque
 import time
-import pandas as pd
 import numpy as np
 import logging
 
 import sys
 
+
 def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
+
 def currentMs():
     return time.time() * 1000
+
 
 tick = 0
 robot = None
@@ -24,6 +26,7 @@ stopCommand = ""
 for i in range(60):
     stopCommand += "S"
 stopCommand += "\n"
+
 
 class Robot:
     def __init__(self, loc):
@@ -48,7 +51,7 @@ class Robot:
                 return
             search_result = breath_first_search(grid, self.loc, orders_starts)
             # eprint(search_result)
-            #if search_result:
+            # if search_result:
             self.order = [order for order in orders if order.start == search_result[1]][0]
             self.target = self.order.start
             self.path = get_path(search_result[0], self.loc, self.target)
@@ -104,8 +107,8 @@ class Robot:
     def create_commandline(self):
         commandline = []
         if not self.path:
-        #     if len(self.commandline) < 60:
-        #         commandline.extend(['S' for x in range(60-len(self.commandline))])
+            #     if len(self.commandline) < 60:
+            #         commandline.extend(['S' for x in range(60-len(self.commandline))])
             return
         for i in range(len(self.path)):
             if self.path[i] == self.path[-1]:
@@ -135,7 +138,6 @@ class Order(object):
         self.createdAt = createdAt
 
 
-
 class Grid:
     def __init__(self, width, height):
         self.width = width
@@ -148,7 +150,7 @@ class Grid:
 
     def is_not_barrier(self, point):
         # TODO use plain arrays
-        return not self.barriers[point[0]][point[1]]
+        return not self.barriers[point[1] - 1][point[0] - 1]
         #  return point not in self.barriers  # TODO OPTIMIZE - SLOW PART
 
     def get_neighbors(self, point):
@@ -232,17 +234,13 @@ def main():
     map_ = f.readlines(N * N)
 
     # print(formatted_map)
-    barriers = pd.DataFrame(
-        np.zeros([N, N]) * np.nan,
-        index=[x for x in range(1, N + 1)],
-        columns=[x for x in range(1, N + 1)]
-    ).replace({np.nan: None})
-
+    barriers = [] # x y
+   # barriers[y][x]
     def add_barriers(map_):
         for y, line in enumerate(map_):
+            barriers.append([])
             for x, point in enumerate(line):
-                if point == '#':
-                    barriers[x + 1][y + 1] = True
+                barriers[y].append(point == '#')
 
     add_barriers(map_)
     # print(barriers)
@@ -255,7 +253,7 @@ def main():
     sys.stdout.write(str(1) + '\n')
     for x in range(N):
         for y in range(N):
-            if barriers[x + 1][y + 1] is None and robot is None:
+            if barriers[y][x] == False and robot is None:
                 robot = Robot((x + 1, y + 1))
                 sys.stdout.write(f'{y + 1} {x + 1}\n')
                 sys.stdout.flush()
@@ -334,9 +332,12 @@ def main():
 
         endMs = currentMs()
 
-        totalTimeTookMs = totalTimeTookMs + (endMs - startMs)
+        tookMs = endMs - startMs
+        totalTimeTookMs = totalTimeTookMs + (tookMs)
+        eprint("tick took = " + str(tookMs))
 
         # print('robot_loc:', robot.loc)
+
 
 import traceback
 
@@ -345,4 +346,3 @@ try:
 except BaseException:
     tb = traceback.format_exc()
     print(tb)
-
