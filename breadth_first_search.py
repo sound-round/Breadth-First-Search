@@ -5,9 +5,10 @@ import time
 import pandas as pd
 import numpy as np
 import logging
+import sys
 
 
-CELL_SIZE = 30
+CELL_SIZE = 5
 WIDTH = 30
 HEIGHT = 20
 ROBOT_COLOR = "#FF0000"
@@ -19,6 +20,87 @@ ORDER_LINE_COLOR = "#000000"
 BARRIER_COLOR = "#505050"
 START = (10, 7)
 TARGET = (20, 7)
+
+
+class Order(object):
+    def __init__(self, start, end):
+        self.start = start
+        self.end = end
+
+
+f = open('/var/tmp/01', 'r')
+first_str = f.readline().split(' ')
+N = int(first_str[0])
+max_tips = int(first_str[1])
+cost = int(first_str[2])
+print('N:', N, 'MAX_tips:', max_tips, 'cost:', cost)
+
+map_ = f.readlines(N * N)
+formatted_map = []
+for line in map_:
+    formatted_map.append(line[:-1])
+print(formatted_map)
+
+barriers = pd.DataFrame(
+    np.zeros([N, N]) * np.nan,
+    index=[x for x in range(1, N + 1)],
+    columns=[x for x in range(1, N + 1)]
+).replace({np.nan: None})
+
+
+def add_barriers(map_):
+    for y, line in enumerate(map_):
+        for x, point in enumerate(line):
+            if point == '#':
+                barriers[x + 1][y + 1] = True
+
+
+add_barriers(formatted_map)
+print(barriers)
+
+second_str = f.readline().split(' ')
+n_iters = int(second_str[0])
+n_orders = int(second_str[1])
+print('n_iters:', n_iters, 'n_orders:', n_orders)
+
+# TODO output R(robots) and coordinates
+try:
+    sys.stdout.write(str(1) + '\n')
+    sys.stdout.write(f'{int(N / 2)} {int(N / 2)}\n')
+    sys.stdout.flush()
+finally:
+    pass
+    # sys.stdout.close()
+
+
+
+
+def get_orders(file):
+    n_orders = int(file.readline())
+    new_orders = []
+    for i in range(n_orders):
+        order = file.readline().split()
+        new_orders.append(order)
+    return new_orders
+
+
+def add_orders(new_orders):
+    global orders
+    for order in new_orders:
+        orders.append(Order(
+            (int(order[0]), int(order[1])),
+            (int(order[2]), int(order[3])),
+        ))
+
+
+#new_orders = get_orders(f)
+#print('orders:', new_orders)
+orders = []
+#add_orders(new_orders)
+#print('orders:', orders)
+
+
+
 
 
 def configure_logging():
@@ -34,12 +116,6 @@ def configure_logging():
 configure_logging()
 
 
-class Order(object):
-    def __init__(self, start, end):
-        self.start = start
-        self.end = end
-
-
 class Robot:
     def __init__(self, loc):
         self.loc = loc
@@ -48,6 +124,8 @@ class Robot:
         self.path = None
         self.target = None
         self.route = None
+        self.commandline = []
+        self.addition = []
 
     def find_path(self, orders):
 
@@ -55,7 +133,9 @@ class Robot:
 
         if not self.goods:
             orders_starts = [order.start for order in orders]
+            print('orders_starts:', orders_starts)
             search_result = breath_first_search(grid, self.loc, orders_starts)
+            print(search_result)
             self.order = [order for order in orders if order.start == search_result[1]][0]
             self.target = self.order.start
             self.path = get_path(search_result[0], self.loc, self.target)
@@ -63,7 +143,6 @@ class Robot:
         self.target = self.order.end
         search_result = breath_first_search(grid, self.loc, [self.target])
         self.path = get_path(search_result[0], self.loc, self.target)
-
         end_time = time.time() * 1000.0
         logging.info('robot find path time: %d', end_time - start_time)
         return
@@ -71,31 +150,69 @@ class Robot:
     def walk(self):
         start_time = time.time() * 1000.0
         global orders
-        self.route = iter(self.path[1:])
+        # print('im here')
+        if not self.route:
+            if self.addition:
+                self.route = iter(self.addition)
+                self.commandline.extend(self.addition)
+                self.addition = []
+            else:
+                self.route = iter(self.commandline)
+
         try:
-            # stringCommand = "DDDDDDDD"
-            # for char in stringCommand:
-                # if char == "U":
-                #     self.loc = self.loc + Point.UP
-                # if char == "D":
-                #     self.loc = self.loc + Point.DOWN
-                # if char == "R":
-                #     self.loc = self.loc + Point.RIGHT
-            self.loc = self.route.__next__()
-            self.path.pop(0)
-            # TODO calc path once
-            # search_result = breath_first_search(grid, self.loc, [self.target])
-            # self.path = get_path(search_result[0], self.loc, self.target)
+            char = next(self.route)
+            if char == "U":
+                self.loc = (self.loc[0], self.loc[1] - 1)
+            elif char == "D":
+                self.loc = (self.loc[0], self.loc[1] + 1)
+            elif char == "R":
+                self.loc = (self.loc[0] + 1, self.loc[1])
+            elif char == "L":
+                self.loc = (self.loc[0] - 1, self.loc[1])
+            elif char == 'P' or char == 'T':
+                pass
+            elif char == 'S':
+                pass
         except StopIteration:
-            print('StopIteration')
-            if self.target == self.order.end:
+            if self.target == self.order.end and orders:
                 orders.pop(orders.index(self.order))
             self.goods = not self.goods
-            self.route = None
+            self.path = None
+
             if orders:
-                robot.find_path(orders)
+                self.find_path(orders)
+            # print('stop_iter path:', self.path)
+            self.route = None
+            self.addition = self.create_commandline()
+
         end_time = time.time() * 1000.0
         logging.info('robot walk time: %d', end_time - start_time)
+
+    def create_commandline(self):
+        commandline = []
+        if not self.path:
+        #     if len(self.commandline) < 60:
+        #         commandline.extend(['S' for x in range(60-len(self.commandline))])
+            return
+        for i in range(len(self.path)):
+            if self.path[i] == self.path[-1]:
+                if self.goods:
+                    commandline.append('P')
+                else:
+                    commandline.append('T')
+                break
+            shift_x = self.path[i + 1][0] - self.path[i][0]
+            shift_y = self.path[i + 1][1] - self.path[i][1]
+            shift = (shift_x, shift_y)
+            if shift == (1, 0):
+                commandline.append('D')
+            elif shift == (-1, 0):
+                commandline.append('U')
+            elif shift == (0, 1):
+                commandline.append('R')
+            elif shift == (0, -1):
+                commandline.append('L')
+        return commandline
 
 
 class Grid:
@@ -106,7 +223,7 @@ class Grid:
 
     def in_bounds(self, point):
         (x, y) = point
-        return 0 <= x < self.width / CELL_SIZE and 0 <= y < self.height / CELL_SIZE
+        return 0 < x <= self.width / CELL_SIZE and 0 < y <= self.height / CELL_SIZE
 
     def is_not_barrier(self, point):
         return not self.barriers[point[0]][point[1]]
@@ -181,36 +298,59 @@ def get_path(came_from, start_point, finish_point):
     return path
 
 
-barriers = pd.DataFrame(
-    np.zeros([HEIGHT, WIDTH]) * np.nan,
-).replace({np.nan: None})
-print(barriers)
 
-
-grid = Grid(WIDTH * CELL_SIZE, HEIGHT * CELL_SIZE)
+grid = Grid(N * CELL_SIZE, N * CELL_SIZE)
 grid.barriers = barriers
 
+START = (4, 4)   # (N / 2, N / 2)
+robot = Robot(START)
+# if not robot.path:
+#     robot.find_path(orders)
+#     robot.create_commandline()
+print('commandline:', robot.commandline)
+print('len sl:', len(robot.commandline))
+
+rest = []
+for i in range(n_iters - 1):
+    new_orders = get_orders(f)
+    print('new_orders!!!', new_orders)
+    if new_orders:
+        add_orders(new_orders)
+    if rest:
+        robot.commandline = rest
+
+    if not robot.path:
+        robot.find_path(orders)
+        robot.commandline = robot.create_commandline()
+    k = 0
+   # robot.find_path(orders)
+    while k < 60 and robot.path:
+        robot.walk()
+        print('robot_loc in cicle', robot.loc)
+        k += 1
+    print('finish commandline from main:', robot.commandline)
+    print('len cl:', len(robot.commandline))
+    if len(robot.commandline) > 60:
+        rest = robot.commandline[60:]
+        robot.commandline = robot.commandline[:60]
+    if len(robot.commandline) < 60:
+        robot.commandline.extend(['S' for x in range(60-len(robot.commandline))])
+    sys.stdout.write(''.join(robot.commandline) + '\n')
+    sys.stdin.flush()
+    robot.commandline = []
+    print('robot_loc:', robot.loc)
+# TODO в цикле по итерациям, оставляя остаток от комлайн
+
+
+'''
 window = Tk()
 window.title('breath_first_search')
 canvas = Canvas(
     window,
     background='light grey',
-    width=WIDTH * CELL_SIZE,
-    height=HEIGHT * CELL_SIZE,
+    width=(N + 1) * CELL_SIZE,
+    height=(N + 1) * CELL_SIZE,
 )
-
-
-orders = []
-for x in range(1, 40):
-    # TODO delete from barriers
-    orders.append(Order(
-        (random.randint(0, WIDTH - 1), random.randint(0, HEIGHT - 1)),
-        (random.randint(0, WIDTH - 1), random.randint(0, HEIGHT - 1))
-    ))
-
-
-robot = Robot(START)
-robot.find_path(orders)
 
 # input example
 # program:
@@ -244,10 +384,10 @@ canvas.bind("<Button-1>", on_click)
 
 
 def draw_grid():
-    for line in range(0, WIDTH * CELL_SIZE, CELL_SIZE):
-        canvas.create_line([(line, 0), (line, HEIGHT * CELL_SIZE)], fill='grey', tags='grid_line_w')
-    for line in range(0, HEIGHT * CELL_SIZE, CELL_SIZE):
-        canvas.create_line([(0, line), (WIDTH * CELL_SIZE, line)], fill='grey', tags='grid_line_h')
+    for line in range(0, (N + 1) * CELL_SIZE, CELL_SIZE):
+        canvas.create_line([(line, 0), (line, (N + 1) * CELL_SIZE)], fill='grey', tags='grid_line_w')
+    for line in range(0, (N + 1) * CELL_SIZE, CELL_SIZE):
+        canvas.create_line([(0, line), ((N + 1) * CELL_SIZE, line)], fill='grey', tags='grid_line_h')
     canvas.grid(row=0, column=0)
 
 
@@ -286,13 +426,15 @@ def draw():
     canvas.create_rectangle(0, 0, 1024, 1024, fill="#FFFFFF")
     draw_grid()
     draw_orders()
+    print('robot.loc', robot.loc)
     robot_x, robot_y = robot.loc
     target_x, target_y = robot.target
     draw_rect_at(robot_x, robot_y, ROBOT_COLOR)
     draw_rect_at(target_x, target_y, TARGET_COLOR)
-    for point in robot.path[1:-1]:
-        x, y = point
-        draw_rect_at(x, y, PATH_COLOR)
+    if robot.path:
+        for point in robot.path[1:-1]:
+            x, y = point
+            draw_rect_at(x, y, PATH_COLOR)
 
     for x in barriers.columns:
         for y in barriers.index:
@@ -312,3 +454,4 @@ def do_loop():
 do_loop()
 
 window.mainloop()
+'''
