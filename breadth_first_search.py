@@ -9,17 +9,17 @@ import sys
 
 
 CELL_SIZE = 5
-WIDTH = 30
-HEIGHT = 20
-ROBOT_COLOR = "#FF0000"
-PATH_COLOR = "#00FF00"
-TARGET_COLOR = "#0000FF"
-ORDER_START_COLOR = "#00ddFF"
-ORDER_END_COLOR = "#ffdd00"
-ORDER_LINE_COLOR = "#000000"
-BARRIER_COLOR = "#505050"
-START = (10, 7)
-TARGET = (20, 7)
+# WIDTH = 30
+# HEIGHT = 20
+# ROBOT_COLOR = "#FF0000"
+# PATH_COLOR = "#00FF00"
+# TARGET_COLOR = "#0000FF"
+# ORDER_START_COLOR = "#00ddFF"
+# ORDER_END_COLOR = "#ffdd00"
+# ORDER_LINE_COLOR = "#000000"
+# BARRIER_COLOR = "#505050"
+# START = (10, 7)
+# TARGET = (20, 7)
 
 
 class Order(object):
@@ -133,9 +133,13 @@ class Robot:
 
         if not self.goods:
             orders_starts = [order.start for order in orders]
-            print('orders_starts:', orders_starts)
+            # print('orders_starts:', orders_starts)
+            if not orders_starts:
+                self.path = None
+                return
             search_result = breath_first_search(grid, self.loc, orders_starts)
-            print(search_result)
+            # print(search_result)
+            #if search_result:
             self.order = [order for order in orders if order.start == search_result[1]][0]
             self.target = self.order.start
             self.path = get_path(search_result[0], self.loc, self.target)
@@ -162,13 +166,13 @@ class Robot:
         try:
             char = next(self.route)
             if char == "U":
-                self.loc = (self.loc[0], self.loc[1] - 1)
+                self.loc = (self.loc[0] -1 , self.loc[1])
             elif char == "D":
-                self.loc = (self.loc[0], self.loc[1] + 1)
-            elif char == "R":
                 self.loc = (self.loc[0] + 1, self.loc[1])
+            elif char == "R":
+                self.loc = (self.loc[0], self.loc[1] + 1)
             elif char == "L":
-                self.loc = (self.loc[0] - 1, self.loc[1])
+                self.loc = (self.loc[0], self.loc[1] - 1)
             elif char == 'P' or char == 'T':
                 pass
             elif char == 'S':
@@ -200,18 +204,18 @@ class Robot:
                     commandline.append('P')
                 else:
                     commandline.append('T')
-                break
+                continue
             shift_x = self.path[i + 1][0] - self.path[i][0]
             shift_y = self.path[i + 1][1] - self.path[i][1]
             shift = (shift_x, shift_y)
-            if shift == (1, 0):
-                commandline.append('D')
-            elif shift == (-1, 0):
-                commandline.append('U')
-            elif shift == (0, 1):
+            if shift == (0, 1):
                 commandline.append('R')
             elif shift == (0, -1):
                 commandline.append('L')
+            elif shift == (1, 0):
+                commandline.append('D')
+            elif shift == (-1, 0):
+                commandline.append('U')
         return commandline
 
 
@@ -311,9 +315,9 @@ print('commandline:', robot.commandline)
 print('len sl:', len(robot.commandline))
 
 rest = []
-for i in range(n_iters - 1):
+for i in range(n_iters):
     new_orders = get_orders(f)
-    print('new_orders!!!', new_orders)
+    # print('new_orders!!!', new_orders)
     if new_orders:
         add_orders(new_orders)
     if rest:
@@ -326,20 +330,23 @@ for i in range(n_iters - 1):
    # robot.find_path(orders)
     while k < 60 and robot.path:
         robot.walk()
-        print('robot_loc in cicle', robot.loc)
+        #print('robot_loc in cicle', robot.loc)
         k += 1
-    print('finish commandline from main:', robot.commandline)
-    print('len cl:', len(robot.commandline))
+    # print('finish commandline from main:', robot.commandline)
+    # print('len cl:', len(robot.commandline))
+    if not robot.commandline:
+        robot.commandline = ['S' for x in range(60)]
     if len(robot.commandline) > 60:
         rest = robot.commandline[60:]
         robot.commandline = robot.commandline[:60]
     if len(robot.commandline) < 60:
         robot.commandline.extend(['S' for x in range(60-len(robot.commandline))])
+    # print('finish commandline from main:', robot.commandline)
+    # print('len cl:', len(robot.commandline))
     sys.stdout.write(''.join(robot.commandline) + '\n')
     sys.stdin.flush()
     robot.commandline = []
-    print('robot_loc:', robot.loc)
-# TODO в цикле по итерациям, оставляя остаток от комлайн
+    # print('robot_loc:', robot.loc)
 
 
 '''
