@@ -4,9 +4,10 @@ import random
 import time
 import pandas as pd
 import numpy as np
+import logging
 
 
-CELL_SIZE = 20
+CELL_SIZE = 30
 WIDTH = 30
 HEIGHT = 20
 ROBOT_COLOR = "#FF0000"
@@ -18,6 +19,19 @@ ORDER_LINE_COLOR = "#000000"
 BARRIER_COLOR = "#505050"
 START = (10, 7)
 TARGET = (20, 7)
+
+
+def configure_logging():
+    logging.basicConfig(
+        filename='log.log',
+        filemode='w',
+        level=logging.DEBUG,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%m/%d/%Y %I:%M:%S %p',
+    )
+
+
+configure_logging()
 
 
 class Order(object):
@@ -36,6 +50,9 @@ class Robot:
         self.route = None
 
     def find_path(self, orders):
+
+        start_time = time.time() * 1000.0
+
         if not self.goods:
             orders_starts = [order.start for order in orders]
             search_result = breath_first_search(grid, self.loc, orders_starts)
@@ -46,15 +63,29 @@ class Robot:
         self.target = self.order.end
         search_result = breath_first_search(grid, self.loc, [self.target])
         self.path = get_path(search_result[0], self.loc, self.target)
+
+        end_time = time.time() * 1000.0
+        logging.info('robot find path time: %d', end_time - start_time)
         return
 
     def walk(self):
+        start_time = time.time() * 1000.0
         global orders
         self.route = iter(self.path[1:])
         try:
+            # stringCommand = "DDDDDDDD"
+            # for char in stringCommand:
+                # if char == "U":
+                #     self.loc = self.loc + Point.UP
+                # if char == "D":
+                #     self.loc = self.loc + Point.DOWN
+                # if char == "R":
+                #     self.loc = self.loc + Point.RIGHT
             self.loc = self.route.__next__()
-            search_result = breath_first_search(grid, self.loc, [self.target])
-            self.path = get_path(search_result[0], self.loc, self.target)
+            self.path.pop(0)
+            # TODO calc path once
+            # search_result = breath_first_search(grid, self.loc, [self.target])
+            # self.path = get_path(search_result[0], self.loc, self.target)
         except StopIteration:
             print('StopIteration')
             if self.target == self.order.end:
@@ -63,9 +94,8 @@ class Robot:
             self.route = None
             if orders:
                 robot.find_path(orders)
-
-
-# PROFIT = MAX_TIPS - ORDER.CREATED - DELIVERY_TIME
+        end_time = time.time() * 1000.0
+        logging.info('robot walk time: %d', end_time - start_time)
 
 
 class Grid:
@@ -83,6 +113,7 @@ class Grid:
         #  return point not in self.barriers  # TODO OPTIMIZE - SLOW PART
 
     def get_neighbors(self, point):
+        start_time = time.time() * 1000.0
         (x, y) = point
         # East, West, North, South
         neighbors = [(x + 1, y), (x - 1, y), (x, y - 1), (x, y + 1)]
@@ -91,6 +122,8 @@ class Grid:
             neighbors.reverse()
         results = filter(self.in_bounds, neighbors)
         results = filter(self.is_not_barrier, results)
+        end_time = time.time() * 1000.0
+        # logging.info('get_neighbors time: %d', end_time - start_time)
         return results
 
 
@@ -109,6 +142,7 @@ class Queue:
 
 
 def breath_first_search(graph, start_point, finish_points: list = []):
+    start_time = time.time() * 1000.0
     frontier = Queue()
     frontier.put(start_point)
     came_from = dict()
@@ -126,12 +160,14 @@ def breath_first_search(graph, start_point, finish_points: list = []):
             if next_point not in came_from:
                 frontier.put(next_point)
                 came_from[next_point] = current_point
-
+    end_time = time.time() * 1000.0
+    logging.info('breath_first_search time: %d', end_time - start_time)
     return came_from, target_point
 
 
 # start must be the same that was in breath_first_search
 def get_path(came_from, start_point, finish_point):
+    start_time = time.time() * 1000.0
     current_point = finish_point
     path = []
 
@@ -140,6 +176,8 @@ def get_path(came_from, start_point, finish_point):
         current_point = came_from[current_point]
     path.append(start_point)
     path.reverse()
+    end_time = time.time() * 1000.0
+    logging.info('get_path time: %d', end_time - start_time)
     return path
 
 
@@ -163,7 +201,7 @@ canvas = Canvas(
 
 
 orders = []
-for x in range(1, 4):
+for x in range(1, 40):
     # TODO delete from barriers
     orders.append(Order(
         (random.randint(0, WIDTH - 1), random.randint(0, HEIGHT - 1)),
@@ -174,8 +212,15 @@ for x in range(1, 4):
 robot = Robot(START)
 robot.find_path(orders)
 
+# input example
+# program:
+# UUUUURRRRRRTUUUUUUPRRRRRRRRDDDDDDTLLLLLLLP
+# server: 10
+# 100 100 300 300
+# 22 10 30 30
 
 def on_click(event):
+    #TODO do not place barrier at order
     global barriers
 
     x = int(event.x / CELL_SIZE)
@@ -229,8 +274,15 @@ def draw_orders():
         draw_rect_at(order.end[0], order.end[1], ORDER_END_COLOR)
         draw_line_at(order.start, order.end, ORDER_LINE_COLOR)
 
+lastFrameStartMs = time.time() * 1000
 
 def draw():
+    global lastFrameStartMs
+    currentMs = time.time() * 1000
+    logging.info('time since last frame: %d', currentMs - lastFrameStartMs)
+    lastFrameStartMs = currentMs
+    canvas.delete("all")
+
     canvas.create_rectangle(0, 0, 1024, 1024, fill="#FFFFFF")
     draw_grid()
     draw_orders()
@@ -249,18 +301,14 @@ def draw():
 
 
 def do_loop():
+    if orders:
+        robot.walk()
+    else:
+        print('finish!')
+        exit(0)
     draw()
     window.after(int(1000 / 15), do_loop)
 
-
-def run_robot():
-    if orders:
-        robot.walk()
-        window.after(int(10), run_robot)
-    else:
-        print('finish!')
-
-
 do_loop()
-run_robot()
+
 window.mainloop()
