@@ -22,10 +22,10 @@ totalTimeTookMs = 0
 
 CELL_SIZE = 5
 
-stopCommand = ""
+stop_сommand = ""
 for i in range(60):
-    stopCommand += "S"
-stopCommand += "\n"
+    stop_сommand += "S"
+stop_сommand += "\n"
 
 
 class Robot:
@@ -35,48 +35,45 @@ class Robot:
         self.order = None
         self.path = None
         self.target = None
-        self.route = None
+        self.cur_route = None
+        self.full_route = []
         self.commandline = []
         self.addition = []
 
     def find_path(self, orders):
 
-        start_time = time.time() * 1000.0
+        # start_time = time.time() * 1000.0
 
         if not self.goods:
             orders_starts = [order.start for order in orders]
-            # print('orders_starts:', orders_starts)
+            #print('orders_starts:', orders_starts)
             if not orders_starts:
                 self.path = None
                 return
             search_result = breath_first_search(grid, self.loc, orders_starts)
-            # eprint(search_result)
-            # if search_result:
+            #print('search res', search_result)
             self.order = [order for order in orders if order.start == search_result[1]][0]
+            print('self_ordrr', self.order.start)
             self.target = self.order.start
             self.path = get_path(search_result[0], self.loc, self.target)
+            #print('selfpath', self.path)
             return
         self.target = self.order.end
+        #print('orderEND', self.order.end)
         search_result = breath_first_search(grid, self.loc, [self.target])
+        #print('search_result!!!', search_result)
         self.path = get_path(search_result[0], self.loc, self.target)
-        end_time = time.time() * 1000.0
-        logging.info('robot find path time: %d', end_time - start_time)
+        #print('SELFPATH', self.path)
         return
 
     def walk(self):
         start_time = time.time() * 1000.0
         global orders
-        # print('im here')
-        if not self.route:
-            if self.addition:
-                self.route = iter(self.addition)
-                self.commandline.extend(self.addition)
-                self.addition = []
-            else:
-                self.route = iter(self.commandline)
-
+        if not self.cur_route:
+            self.cur_route = iter(self.full_route)
+            self.full_route = []
         try:
-            char = next(self.route)
+            char = next(self.cur_route)
             if char == "U":
                 self.loc = (self.loc[0] -1 , self.loc[1])
             elif char == "D":
@@ -90,16 +87,23 @@ class Robot:
             elif char == 'S':
                 pass
         except StopIteration:
-            if self.target == self.order.end and orders:
-                orders.pop(orders.index(self.order))
             self.goods = not self.goods
-            self.path = None
-
+            if self.target == self.order.end and orders:
+                print('SELF ORDER:', self.order.start, self.order.end)
+                for order in orders:
+                    print('order in orders', order.start, order.end)
+                print('del')
+                orders.pop(orders.index(self.order))
             if orders:
                 self.find_path(orders)
-            # print('stop_iter path:', self.path)
-            self.route = None
-            self.addition = self.create_commandline()
+
+            #print('path in walk', self.path)
+            addition = self.create_commandline()
+            if addition:
+                self.full_route.extend(addition)
+                #print('self full route', self.full_route)
+                self.commandline.extend(addition)
+            self.cur_route = []
 
         end_time = time.time() * 1000.0
         logging.info('robot walk time: %d', end_time - start_time)
@@ -107,9 +111,7 @@ class Robot:
     def create_commandline(self):
         commandline = []
         if not self.path:
-            #     if len(self.commandline) < 60:
-            #         commandline.extend(['S' for x in range(60-len(self.commandline))])
-            return
+            return commandline
         for i in range(len(self.path)):
             if self.path[i] == self.path[-1]:
                 if self.goods:
@@ -132,10 +134,10 @@ class Robot:
 
 
 class Order(object):
-    def __init__(self, start, end, createdAt):
+    def __init__(self, start, end, created_at):
         self.start = start
         self.end = end
-        self.createdAt = createdAt
+        self.createdAt = created_at
 
 
 class Grid:
@@ -214,6 +216,7 @@ def get_path(came_from, start_point, finish_point):
 
     while current_point != start_point:
         path.append(current_point)
+        #print('came_from',came_from)
         current_point = came_from[current_point]
     path.append(start_point)
     path.reverse()
@@ -249,7 +252,7 @@ def main():
     n_iters = int(second_str[0])
     n_orders = int(second_str[1])
     # print('n_iters:', n_iters, 'n_orders:', n_orders)
-    # TODO output R(robots) and coordinates
+
     sys.stdout.write(str(1) + '\n')
     for x in range(N):
         for y in range(N):
@@ -286,57 +289,47 @@ def main():
     # print('orders:', orders)
     grid = Grid(N * CELL_SIZE, N * CELL_SIZE)
     grid.barriers = barriers
-    rest = []
 
     for i in range(n_iters):
         if totalTimeTookMs > 15000:
-            sys.stdout.write(stopCommand)
+            sys.stdout.write(stop_сommand)
             sys.stdout.flush()
             continue
-
         f.flush()
         new_orders = get_orders(f)
         f.flush()
-
         startMs = currentMs()
-
-        # print('new_orders!!!', new_orders)
+        #print('new_orders', new_orders)
         if new_orders:
             add_orders(new_orders)
-        if rest:
-            robot.commandline = rest
-
-        if not robot.path:
+        if not robot.path and orders:
             robot.find_path(orders)
-            robot.commandline = robot.create_commandline()
+            #print('rob path:', robot.path)
+            command_line = robot.create_commandline()
+            #print('new_cl', command_line)
+            robot.commandline.extend(command_line)
+            robot.full_route.extend(command_line)
         k = 0
-        # robot.find_path(orders)
+        #print('!!!ORDERS:' , orders)
         while k < 60 and robot.path:
             robot.walk()
-            # print('robot_loc in cicle', robot.loc)
             k += 1
-        # print('finish commandline from main:', robot.commandline)
-        # print('len cl:', len(robot.commandline))
+
         if not robot.commandline:
             robot.commandline = ['S' for x in range(60)]
-        if len(robot.commandline) > 60:
-            rest = robot.commandline[60:]
-            robot.commandline = robot.commandline[:60]
         if len(robot.commandline) < 60:
             robot.commandline.extend(['S' for x in range(60 - len(robot.commandline))])
-        # print('finish commandline from main:', robot.commandline)
-        # print('len cl:', len(robot.commandline))
-        sys.stdout.write(''.join(robot.commandline) + '\n')
+
+        cl_to_send = robot.commandline[:60]
+
+        sys.stdout.write(''.join(cl_to_send) + '\n')
         sys.stdout.flush()
-        robot.commandline = []
+        del robot.commandline[:60]
 
         endMs = currentMs()
 
         tookMs = endMs - startMs
         totalTimeTookMs = totalTimeTookMs + (tookMs)
-        eprint("tick took = " + str(tookMs))
-
-        # print('robot_loc:', robot.loc)
 
 
 import traceback
