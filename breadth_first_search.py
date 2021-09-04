@@ -20,7 +20,6 @@ robot = None
 orders = []
 totalTimeTookMs = 0
 
-CELL_SIZE = 5
 
 stop_сommand = ""
 for i in range(60):
@@ -35,11 +34,8 @@ class Robot:
         self.order = None
         self.path = None
         self.target = None
-        # self.cur_route = None
-        # self.full_route = []
         self.commandline = []
         self.output = []
-        # self.addition = []
 
     def find_path(self, orders):
 
@@ -70,13 +66,10 @@ class Robot:
     def walk(self):
         start_time = time.time() * 1000.0
         global orders
-        # if not self.cur_route:
-        #     self.cur_route = iter(self.full_route)
-        #     self.full_route = []
         try:
             char = self.commandline.pop(0)
             if char == "U":
-                self.loc = (self.loc[0] -1 , self.loc[1])
+                self.loc = (self.loc[0] - 1, self.loc[1])
             elif char == "D":
                 self.loc = (self.loc[0] + 1, self.loc[1])
             elif char == "R":
@@ -91,10 +84,6 @@ class Robot:
         except IndexError:
             self.goods = not self.goods
             if self.target == self.order.end and orders:
-                # print('SELF ORDER:', self.order.start, self.order.end)
-                # for order in orders:
-                #     print('order in orders', order.start, order.end)
-                # print('del')
                 orders.pop(orders.index(self.order))
             if orders:
                 self.find_path(orders)
@@ -144,7 +133,7 @@ class Grid:
 
     def in_bounds(self, point):
         (x, y) = point
-        return 0 < x <= self.width / CELL_SIZE and 0 < y <= self.height / CELL_SIZE
+        return 0 < x <= self.width and 0 < y <= self.height
 
     def is_not_barrier(self, point):
         # TODO use plain arrays
@@ -162,7 +151,6 @@ class Grid:
         results = filter(self.in_bounds, neighbors)
         results = filter(self.is_not_barrier, results)
         end_time = time.time() * 1000.0
-        # logging.info('get_neighbors time: %d', end_time - start_time)
         return results
 
 
@@ -212,29 +200,24 @@ def get_path(came_from, start_point, finish_point):
 
     while current_point != start_point:
         path.append(current_point)
-        #print('came_from',came_from)
         current_point = came_from[current_point]
     path.append(start_point)
     path.reverse()
     end_time = time.time() * 1000.0
-    logging.info('get_path time: %d', end_time - start_time)
     return path
 
 
 def main():
     global barriers, robot, grid, totalTimeTookMs
-    # f = open('/var/tmp/01', 'r')
     f = io.open(sys.stdin.fileno())
     first_str = f.readline().split(' ')
     N = int(first_str[0])
     max_tips = int(first_str[1])
     cost = int(first_str[2])
-    # print('N:', N, 'MAX_tips:', max_tips, 'cost:', cost)
     map_ = f.readlines(N * N)
 
-    # print(formatted_map)
+
     barriers = [] # x y
-   # barriers[y][x]
     def add_barriers(map_):
         for y, line in enumerate(map_):
             barriers.append([])
@@ -242,12 +225,11 @@ def main():
                 barriers[y].append(point == '#')
 
     add_barriers(map_)
-    # print(barriers)
+
     second_str = f.readline().split(' ')
-    # f.flush()
+
     n_iters = int(second_str[0])
     n_orders = int(second_str[1])
-    # print('n_iters:', n_iters, 'n_orders:', n_orders)
 
     sys.stdout.write(str(1) + '\n')
     for x in range(N):
@@ -277,13 +259,7 @@ def main():
                 (int(order[2]), int(order[3])),
                 tick
             ))
-
-    # new_orders = get_orders(f)
-    # print('orders:', new_orders)
-
-    # add_orders(new_orders)
-    # print('orders:', orders)
-    grid = Grid(N * CELL_SIZE, N * CELL_SIZE)
+    grid = Grid(N, N)
     grid.barriers = barriers
 
     for i in range(n_iters):
@@ -292,27 +268,26 @@ def main():
             sys.stdout.flush()
             continue
         f.flush()
+
         new_orders = get_orders(f)
         f.flush()
         startMs = currentMs()
-        #print('new_orders', new_orders)
+
         if new_orders:
             add_orders(new_orders)
+
+        if len(orders) > 50:
+            del orders[:-50]
+
+
         if not robot.path and orders:
             robot.find_path(orders)
-            #print('rob path:', robot.path)
             robot.create_commandline()
-            #print('new_cl', command_line)
         k = 0
-        #print('!!!ORDERS:' , orders)
         while k < 60 and robot.path:
-            #print('here')
             robot.walk()
             k += 1
 
-        # if not robot.output:
-        #     robot.output = ['S' for x in range(60)]
-        #print('robot output:', robot.output)
         if len(robot.output) < 60:
             robot.output.extend(['S' for x in range(60 - len(robot.output))])
 
