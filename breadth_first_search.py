@@ -1,7 +1,6 @@
 import io
 from collections import deque
 import time
-import numpy as np
 import logging
 
 import sys
@@ -11,15 +10,15 @@ def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
 
-def currentMs():
+def current_ms():
     return time.time() * 1000
 
 
 tick = 0
 robot = None
 orders = []
-totalTimeTookMs = 0
-
+orders_map = dict()
+total_time_took_ms = 0
 
 stop_сommand = ""
 for i in range(60):
@@ -43,40 +42,42 @@ class Robot:
 
         if not self.goods:
             orders_starts = [order.start for order in orders]
-            #print('orders_starts:', orders_starts)
+            # print('orders_starts:', orders_starts)
             if not orders_starts:
                 self.path = None
                 return
             search_result = breath_first_search(grid, self.loc, orders_starts)
-            #print('search res', search_result)
-            self.order = [order for order in orders if order.start == search_result[1]][0]
+            # print('search res', search_result)
+            self.order = orders_map[search_result[1]][0]
             # print('self_ordrr', self.order.start)
             self.target = self.order.start
             self.path = get_path(search_result[0], self.loc, self.target)
-            #print('selfpath', self.path)
+            # print('selfpath', self.path)
             return
         self.target = self.order.end
-        #print('orderEND', self.order.end)
+        # print('orderEND', self.order.end)
         search_result = breath_first_search(grid, self.loc, [self.target])
-        #print('search_result!!!', search_result)
+        # print('search_result!!!', search_result)
         self.path = get_path(search_result[0], self.loc, self.target)
-        #print('SELFPATH', self.path)
+        # print('SELFPATH', self.path)
         return
 
     def walk(self):
         start_time = time.time() * 1000.0
-        global orders
+        global orders, orders_map
         try:
             char = self.commandline.pop(0)
-            if char == "U":
+            if char == "L":
                 self.loc = (self.loc[0] - 1, self.loc[1])
-            elif char == "D":
-                self.loc = (self.loc[0] + 1, self.loc[1])
             elif char == "R":
-                self.loc = (self.loc[0], self.loc[1] + 1)
-            elif char == "L":
+                self.loc = (self.loc[0] + 1, self.loc[1])
+            elif char == "U":
                 self.loc = (self.loc[0], self.loc[1] - 1)
-            elif char == 'P' or char == 'T':
+            elif char == "D":
+                self.loc = (self.loc[0], self.loc[1] + 1)
+            elif char == 'T':
+                orders_map[self.loc].pop(0)
+            elif char == 'P':
                 pass
             elif char == 'S':
                 pass
@@ -84,13 +85,16 @@ class Robot:
         except IndexError:
             self.goods = not self.goods
             if self.target == self.order.end and orders:
-                orders.pop(orders.index(self.order))
+                try:
+                    index = orders.index(self.order)
+                    orders.pop(index)
+                except:
+                    pass
             if orders:
                 self.find_path(orders)
                 self.create_commandline()
                 return
             self.path = None
-
 
         end_time = time.time() * 1000.0
         logging.info('robot walk time: %d', end_time - start_time)
@@ -109,20 +113,20 @@ class Robot:
             shift_y = self.path[i + 1][1] - self.path[i][1]
             shift = (shift_x, shift_y)
             if shift == (0, 1):
-                self.commandline.append('R')
-            elif shift == (0, -1):
-                self.commandline.append('L')
-            elif shift == (1, 0):
                 self.commandline.append('D')
-            elif shift == (-1, 0):
+            elif shift == (0, -1):
                 self.commandline.append('U')
+            elif shift == (1, 0):
+                self.commandline.append('R')
+            elif shift == (-1, 0):
+                self.commandline.append('L')
 
 
 class Order(object):
     def __init__(self, start, end, created_at):
         self.start = start
         self.end = end
-        self.createdAt = created_at
+        self.created_at = created_at
 
 
 class Grid:
@@ -133,11 +137,11 @@ class Grid:
 
     def in_bounds(self, point):
         (x, y) = point
-        return 0 < x <= self.width and 0 < y <= self.height
+        return 0 <= x < self.width and 0 <= y < self.height
 
     def is_not_barrier(self, point):
         # TODO use plain arrays
-        return not self.barriers[point[1] - 1][point[0] - 1]
+        return not self.barriers[point[1]][point[0]]
         #  return point not in self.barriers  # TODO OPTIMIZE - SLOW PART
 
     def get_neighbors(self, point):
@@ -200,6 +204,12 @@ def get_path(came_from, start_point, finish_point):
 
     while current_point != start_point:
         path.append(current_point)
+        # if not came_from.__contains__(current_point):
+        #     eprint("failed to get path <<< path:")
+        #     eprint(path)
+        #     eprint("came_from.size =")
+        #     eprint(came_from)
+        #
         current_point = came_from[current_point]
     path.append(start_point)
     path.reverse()
@@ -208,7 +218,7 @@ def get_path(came_from, start_point, finish_point):
 
 
 def main():
-    global barriers, robot, grid, totalTimeTookMs
+    global barriers, robot, grid, total_time_took_ms, tick, orders, orders_map
     f = io.open(sys.stdin.fileno())
     first_str = f.readline().split(' ')
     N = int(first_str[0])
@@ -216,8 +226,8 @@ def main():
     cost = int(first_str[2])
     map_ = f.readlines(N * N)
 
+    barriers = []  # y x
 
-    barriers = [] # x y
     def add_barriers(map_):
         for y, line in enumerate(map_):
             barriers.append([])
@@ -235,7 +245,7 @@ def main():
     for x in range(N):
         for y in range(N):
             if barriers[y][x] == False and robot is None:
-                robot = Robot((x + 1, y + 1))
+                robot = Robot((x, y))
                 sys.stdout.write(f'{y + 1} {x + 1}\n')
                 sys.stdout.flush()
 
@@ -252,36 +262,40 @@ def main():
         return new_orders
 
     def add_orders(new_orders):
-        global orders
-        for order in new_orders:
-            orders.append(Order(
-                (int(order[0]), int(order[1])),
-                (int(order[2]), int(order[3])),
-                tick
-            ))
+        global orders, tick, orders_map
+        for order_str in new_orders:
+            order = Order((int(order_str[1]) - 1, int(order_str[0]) - 1),
+                          (int(order_str[3]) - 1, int(order_str[2]) - 1), tick)
+            orders.append(order)
+            if not order.start in orders_map:
+                orders_map[order.start] = []
+            orders_map[order.start].append(order)
+            # eprint(
+            #    "Order start = " + str(order.start[0]) + " " + str(order.start[1]) +
+            #    " Order end = " + str(order.end[0]) + " " + str(order.end[1]))
+
     grid = Grid(N, N)
     grid.barriers = barriers
 
     for i in range(n_iters):
-        if totalTimeTookMs > 15000:
+        new_orders = get_orders(f)
+
+        if total_time_took_ms > 16500:
             sys.stdout.write(stop_сommand)
             sys.stdout.flush()
             continue
         f.flush()
 
-        new_orders = get_orders(f)
-        f.flush()
-        startMs = currentMs()
+        start_ms = current_ms()
 
         if new_orders:
             add_orders(new_orders)
 
-        if len(orders) > 50:
-            del orders[:-50]
-
+        orders = list(filter(lambda o: tick - o.created_at < max_tips, orders))
 
         if not robot.path and orders:
-            robot.find_path(orders)
+            candidates = list(filter(lambda o: orders_map[o.start][0] == o, orders))
+            robot.find_path(candidates)
             robot.create_commandline()
         k = 0
         while k < 60 and robot.path:
@@ -295,16 +309,18 @@ def main():
         sys.stdout.flush()
         robot.output = []
 
-        endMs = currentMs()
+        end_ms = current_ms()
 
-        tookMs = endMs - startMs
-        totalTimeTookMs = totalTimeTookMs + (tookMs)
+        took_ms = end_ms - start_ms
+        total_time_took_ms = total_time_took_ms + (took_ms)
+        tick += 60
 
 
 import traceback
 
 try:
     main()
-except BaseException:
+except BaseException as e:
     tb = traceback.format_exc()
     print(tb)
+    print(e)
